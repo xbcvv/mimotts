@@ -39,4 +39,4 @@ Changing Admin Token takes effect immediately.
 
 ## External API Key 明文显示规则
 
-External API Key 创建或重新生成时会显示完整值一次。系统只保存哈希，已有 External API Key 无法反查完整明文；如果忘记完整 Key，请在后台执行「重新生成 Key」，旧 Key 会立即失效。
+External API Key 当前按明文保存，管理员后台可完整显示和复制。历史版本中只保存 hash 的 Key 无法反推出明文；这类 Key 需要重新生成一次，之后即可完整显示和复制。

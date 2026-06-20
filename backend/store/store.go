@@ -29,6 +29,7 @@ type ExternalKey struct {
 	Hash        string     `json:"hash"`
 	Prefix      string     `json:"prefix"`
 	Masked      string     `json:"masked"`
+	Secret      string     `json:"secret,omitempty"`
 	Permissions []string   `json:"permissions"`
 	Enabled     bool       `json:"enabled"`
 	CreatedAt   time.Time  `json:"createdAt"`
@@ -559,7 +560,7 @@ func (s *Store) ListExternalKeys() []ExternalKey {
 func (s *Store) AddExternalKey(label string, permissions []string) (ExternalKey, string, error) {
 	secret := "mtts_" + randomHex(24)
 	now := time.Now()
-	ext := ExternalKey{ID: id("ek"), Label: fallback(label, "外部应用"), Hash: hash(secret), Prefix: secret[:10], Masked: maskSecret(secret), Permissions: normalizePermissions(permissions), Enabled: true, CreatedAt: now, UpdatedAt: now}
+	ext := ExternalKey{ID: id("ek"), Label: fallback(label, "外部应用"), Hash: hash(secret), Prefix: secret[:10], Masked: maskSecret(secret), Secret: secret, Permissions: normalizePermissions(permissions), Enabled: true, CreatedAt: now, UpdatedAt: now}
 	s.mu.Lock()
 	defer s.mu.Unlock()
 	s.data.ExternalKeys = append(s.data.ExternalKeys, ext)
@@ -615,6 +616,7 @@ func (s *Store) RotateExternalKey(id string) (string, error) {
 			s.data.ExternalKeys[i].Hash = hash(secret)
 			s.data.ExternalKeys[i].Prefix = secret[:10]
 			s.data.ExternalKeys[i].Masked = maskSecret(secret)
+			s.data.ExternalKeys[i].Secret = secret
 			s.data.ExternalKeys[i].UpdatedAt = time.Now()
 			return secret, s.saveLocked()
 		}
@@ -628,7 +630,7 @@ func (s *Store) ValidateExternalKey(secret, permission string) bool {
 	secretHash := hash(secret)
 	for i := range s.data.ExternalKeys {
 		key := &s.data.ExternalKeys[i]
-		if key.Enabled && key.Hash == secretHash && hasPermission(key.Permissions, permission) {
+		if key.Enabled && (key.Hash == secretHash || (key.Secret != "" && key.Secret == secret)) && hasPermission(key.Permissions, permission) {
 			now := time.Now()
 			key.LastUsedAt = &now
 			s.data.Stats.TotalCalls++
