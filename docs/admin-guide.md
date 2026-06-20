@@ -35,3 +35,8 @@ Runtime settings include:
 - Outbound proxy URL
 
 Changing Admin Token takes effect immediately.
+
+
+## External API Key 明文显示规则
+
+External API Key 创建或重新生成时会显示完整值一次。系统只保存哈希，已有 External API Key 无法反查完整明文；如果忘记完整 Key，请在后台执行「重新生成 Key」，旧 Key 会立即失效。

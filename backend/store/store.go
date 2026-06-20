@@ -606,6 +606,22 @@ func (s *Store) UpdateExternalKey(id string, enabled *bool, permissions []string
 	return errors.New("key not found")
 }
 
+func (s *Store) RotateExternalKey(id string) (string, error) {
+	secret := "mtts_" + randomHex(24)
+	s.mu.Lock()
+	defer s.mu.Unlock()
+	for i := range s.data.ExternalKeys {
+		if s.data.ExternalKeys[i].ID == id {
+			s.data.ExternalKeys[i].Hash = hash(secret)
+			s.data.ExternalKeys[i].Prefix = secret[:10]
+			s.data.ExternalKeys[i].Masked = maskSecret(secret)
+			s.data.ExternalKeys[i].UpdatedAt = time.Now()
+			return secret, s.saveLocked()
+		}
+	}
+	return "", errors.New("key not found")
+}
+
 func (s *Store) ValidateExternalKey(secret, permission string) bool {
 	s.mu.Lock()
 	defer s.mu.Unlock()

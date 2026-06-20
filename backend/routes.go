@@ -45,6 +45,7 @@ func (s *Server) routes() http.Handler {
 	mux.HandleFunc("GET /api/admin/mimo-keys/", s.admin(s.revealMiMoKeySecret))
 	mux.HandleFunc("GET /api/admin/ext-keys", s.admin(s.listExternalKeys))
 	mux.HandleFunc("POST /api/admin/ext-keys", s.admin(s.addExternalKey))
+	mux.HandleFunc("POST /api/admin/ext-keys/", s.admin(s.rotateExternalKey))
 	mux.HandleFunc("DELETE /api/admin/ext-keys/", s.admin(s.deleteExternalKey))
 	mux.HandleFunc("PATCH /api/admin/ext-keys/", s.admin(s.updateExternalKey))
 	mux.HandleFunc("GET /api/admin/voices", s.admin(s.listVoices))
@@ -410,6 +411,25 @@ func (s *Server) deleteExternalKey(w http.ResponseWriter, r *http.Request) {
 	}
 	writeJSON(w, map[string]any{"ok": true})
 }
+func (s *Server) rotateExternalKey(w http.ResponseWriter, r *http.Request) {
+	path := strings.TrimPrefix(r.URL.Path, "/api/admin/ext-keys/")
+	if !strings.HasSuffix(path, "/rotate") {
+		writeErr(w, 404, "not found")
+		return
+	}
+	id := strings.TrimSuffix(path, "/rotate")
+	if strings.TrimSpace(id) == "" {
+		writeErr(w, 404, "not found")
+		return
+	}
+	secret, err := s.store.RotateExternalKey(id)
+	if err != nil {
+		writeErr(w, 404, err.Error())
+		return
+	}
+	writeJSON(w, map[string]any{"id": id, "secret": secret})
+}
+
 func (s *Server) updateExternalKey(w http.ResponseWriter, r *http.Request) {
 	id := strings.TrimPrefix(r.URL.Path, "/api/admin/ext-keys/")
 	var body struct {
