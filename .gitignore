@@ -1,0 +1,35 @@
+# Environment / secrets
+.env
+.env.*
+!.env.example
+
+# Runtime data
+data/
+call-logs/
+*.log
+*.jsonl
+mimotts.json
+
+# Build outputs
+frontend/dist/
+backend/static/
+backend/mimotts
+mimotts
+
+# Dependencies
+frontend/node_modules/
+node_modules/
+
+# Temporary / editor
+*.bak
+*.tmp
+.DS_Store
+.idea/
+.vscode/
+
+# Coverage
+coverage/
+*.out
+
+# Embedded/reference repos
+references/MiMo-Skills/
