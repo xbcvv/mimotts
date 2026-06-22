@@ -5,7 +5,6 @@ import (
 	"fmt"
 	"io"
 	"net/http"
-	"net/url"
 	"strconv"
 	"strings"
 	"time"
@@ -31,13 +30,6 @@ func (s *Server) routes() http.Handler {
 	mux.HandleFunc("GET /api/admin/status", s.admin(s.status))
 	mux.HandleFunc("GET /api/admin/settings", s.admin(s.getSettings))
 	mux.HandleFunc("PATCH /api/admin/settings", s.admin(s.updateSettings))
-	mux.HandleFunc("GET /api/admin/channels", s.admin(s.listChannels))
-	mux.HandleFunc("POST /api/admin/channels", s.admin(s.addChannel))
-	mux.HandleFunc("DELETE /api/admin/channels/", s.admin(s.deleteChannel))
-	mux.HandleFunc("PATCH /api/admin/channels/", s.admin(s.updateChannel))
-	mux.HandleFunc("GET /api/admin/channels/", s.admin(s.revealChannelSecret))
-	mux.HandleFunc("GET /api/admin/models", s.admin(s.listModels))
-	mux.HandleFunc("POST /api/admin/upstream-models", s.admin(s.listUpstreamModels))
 	mux.HandleFunc("GET /api/admin/mimo-keys", s.admin(s.listMiMoKeys))
 	mux.HandleFunc("POST /api/admin/mimo-keys", s.admin(s.addMiMoKey))
 	mux.HandleFunc("DELETE /api/admin/mimo-keys/", s.admin(s.deleteMiMoKey))
@@ -153,9 +145,6 @@ func (s *Server) publicVoices(w http.ResponseWriter, r *http.Request) {
 func (s *Server) listVoices(w http.ResponseWriter, r *http.Request) {
 	writeJSON(w, sanitizeVoices(s.store.ListVoices()))
 }
-func (s *Server) listChannels(w http.ResponseWriter, r *http.Request) {
-	writeJSON(w, s.store.ListChannels())
-}
 func (s *Server) listMiMoKeys(w http.ResponseWriter, r *http.Request) {
 	writeJSON(w, s.store.ListMiMoKeys())
 }
@@ -163,169 +152,9 @@ func (s *Server) listExternalKeys(w http.ResponseWriter, r *http.Request) {
 	writeJSON(w, s.store.ListExternalKeys())
 }
 
-func (s *Server) addChannel(w http.ResponseWriter, r *http.Request) {
-	var body struct {
-		Label        string
-		BaseURL      string `json:"baseUrl"`
-		APIKey       string `json:"apiKey"`
-		Weight       int
-		Models       []string
-		ModelAliases map[string]string `json:"modelAliases"`
-	}
-	if decode(w, r, &body) {
-		ch, err := s.store.AddChannel(body.Label, body.BaseURL, body.APIKey, body.Weight, body.Models, body.ModelAliases)
-		if err != nil {
-			writeErr(w, 400, err.Error())
-			return
-		}
-		writeJSON(w, map[string]any{"id": ch.ID})
-	}
-}
-func (s *Server) deleteChannel(w http.ResponseWriter, r *http.Request) {
-	id := strings.TrimPrefix(r.URL.Path, "/api/admin/channels/")
-	if err := s.store.DeleteChannel(id); err != nil {
-		writeErr(w, 404, err.Error())
-		return
-	}
-	writeJSON(w, map[string]any{"ok": true})
-}
-func (s *Server) revealChannelSecret(w http.ResponseWriter, r *http.Request) {
-	if r.Method != http.MethodGet {
-		writeErr(w, http.StatusMethodNotAllowed, "method not allowed")
-		return
-	}
-	path := strings.TrimPrefix(r.URL.Path, "/api/admin/channels/")
-	if !strings.HasSuffix(path, "/secret") {
-		writeErr(w, 404, "not found")
-		return
-	}
-	id := strings.TrimSuffix(path, "/secret")
-	if strings.TrimSpace(id) == "" {
-		writeErr(w, 404, "not found")
-		return
-	}
-	secret, err := s.store.GetChannelSecret(id)
-	if err != nil {
-		writeErr(w, 404, err.Error())
-		return
-	}
-	writeJSON(w, map[string]string{"id": id, "secret": secret})
-}
 
-func (s *Server) updateChannel(w http.ResponseWriter, r *http.Request) {
-	id := strings.TrimPrefix(r.URL.Path, "/api/admin/channels/")
-	var body struct {
-		Label        *string           `json:"label"`
-		BaseURL      *string           `json:"baseUrl"`
-		APIKey       *string           `json:"apiKey"`
-		Weight       *int              `json:"weight"`
-		Enabled      *bool             `json:"enabled"`
-		Models       []string          `json:"models"`
-		ModelAliases map[string]string `json:"modelAliases"`
-	}
-	if decode(w, r, &body) {
-		if err := s.store.UpdateChannel(id, body.Weight, body.Enabled, body.Label, body.BaseURL, body.APIKey, body.Models, body.ModelAliases); err != nil {
-			writeErr(w, 404, err.Error())
-			return
-		}
-		writeJSON(w, map[string]any{"ok": true})
-	}
-}
 
-func (s *Server) listModels(w http.ResponseWriter, r *http.Request) {
-	writeJSON(w, standardModels())
-}
 
-func standardModels() []map[string]any {
-	return []map[string]any{
-		{"id": "mimo-v2.5-tts", "name": "MiMo TTS（预置音色）", "channelSupported": true},
-		{"id": "mimo-v2.5-tts-voiceclone", "name": "MiMo TTS（音色克隆）", "channelSupported": false, "channelNote": "不可用于上游渠道，请使用官方 MiMo API Key"},
-		{"id": "mimo-v2.5-tts-voicedesign", "name": "MiMo TTS（音色设计）", "channelSupported": true},
-		{"id": "*", "name": "*（全部模型）", "channelSupported": true},
-	}
-}
-
-func (s *Server) listUpstreamModels(w http.ResponseWriter, r *http.Request) {
-	var body struct {
-		BaseURL   string `json:"baseUrl"`
-		APIKey    string `json:"apiKey"`
-		ChannelID string `json:"channelId"`
-	}
-	if !decode(w, r, &body) {
-		return
-	}
-	baseURL := body.BaseURL
-	apiKey := body.APIKey
-	if strings.TrimSpace(body.ChannelID) != "" {
-		if ch, err := s.store.GetChannelConfig(body.ChannelID); err == nil {
-			if strings.TrimSpace(baseURL) == "" {
-				baseURL = ch.BaseURL
-			}
-			if strings.TrimSpace(apiKey) == "" {
-				apiKey = ch.APIKey
-			}
-		}
-	}
-	models, err := fetchUpstreamModels(baseURL, apiKey, s.store.GetSettings().ProxyURL)
-	if err != nil {
-		writeErr(w, 400, err.Error())
-		return
-	}
-	writeJSON(w, models)
-}
-
-func httpClientWithProxy(proxyURL string) *http.Client {
-	transport := &http.Transport{}
-	if strings.TrimSpace(proxyURL) != "" {
-		if u, err := url.Parse(strings.TrimSpace(proxyURL)); err == nil {
-			transport.Proxy = http.ProxyURL(u)
-		}
-	}
-	return &http.Client{Timeout: 30 * time.Second, Transport: transport}
-}
-
-func fetchUpstreamModels(baseURL, apiKey, proxyURL string) ([]map[string]string, error) {
-	baseURL = containerReachableBaseURL(baseURL)
-	if baseURL == "" {
-		return nil, fmt.Errorf("Base URL 不能为空")
-	}
-	req, err := http.NewRequest(http.MethodGet, baseURL+"/models", nil)
-	if err != nil {
-		return nil, err
-	}
-	if strings.TrimSpace(apiKey) != "" {
-		req.Header.Set("Authorization", "Bearer "+strings.TrimSpace(apiKey))
-	}
-	client := httpClientWithProxy(proxyURL)
-	res, err := client.Do(req)
-	if err != nil {
-		return nil, fmt.Errorf("读取上游模型失败：%w", err)
-	}
-	defer res.Body.Close()
-	if res.StatusCode < 200 || res.StatusCode >= 300 {
-		b, _ := io.ReadAll(io.LimitReader(res.Body, 2048))
-		return nil, fmt.Errorf("上游 /models 返回 HTTP %d：%s", res.StatusCode, strings.TrimSpace(string(b)))
-	}
-	var body struct {
-		Data []struct {
-			ID string `json:"id"`
-		} `json:"data"`
-	}
-	if err := json.NewDecoder(res.Body).Decode(&body); err != nil {
-		return nil, fmt.Errorf("解析上游模型失败：%w", err)
-	}
-	out := make([]map[string]string, 0, len(body.Data))
-	for _, m := range body.Data {
-		id := strings.TrimSpace(m.ID)
-		if id != "" {
-			out = append(out, map[string]string{"id": id, "name": id})
-		}
-	}
-	if len(out) == 0 {
-		return nil, fmt.Errorf("上游未返回可用模型")
-	}
-	return out, nil
-}
 
 func (s *Server) addMiMoKey(w http.ResponseWriter, r *http.Request) {
 	var body struct {

@@ -54,17 +54,6 @@ type Voice struct {
 	AvailableKeys []string `json:"availableKeys"`
 }
 
-type UpstreamChannel struct {
-	ID           string            `json:"id"`
-	Label        string            `json:"label"`
-	BaseURL      string            `json:"baseUrl"`
-	APIKey       string            `json:"apiKey"`
-	Weight       int               `json:"weight"`
-	Enabled      bool              `json:"enabled"`
-	Models       []string          `json:"models"`       // 本地标准模型支持范围
-	ModelAliases map[string]string `json:"modelAliases"` // 本地标准模型 -> 上游实际模型
-	CreatedAt    time.Time         `json:"createdAt"`
-}
 
 type Settings struct {
 	AdminToken string `json:"adminToken,omitempty"`
@@ -83,7 +72,7 @@ type Stats struct {
 type State struct {
 	MiMoKeys     []MiMoKey         `json:"mimoKeys"`
 	ExternalKeys []ExternalKey     `json:"externalKeys"`
-	Channels     []UpstreamChannel `json:"channels"`
+	Channels     json.RawMessage   `json:"channels,omitempty"`
 	Voices       []Voice           `json:"voices"`
 	Stats        Stats             `json:"stats"`
 	Settings     Settings          `json:"settings"`
@@ -109,14 +98,14 @@ func New(dir string) (*Store, error) {
 func (s *Store) load() error {
 	b, err := os.ReadFile(s.path)
 	if errors.Is(err, os.ErrNotExist) {
-		s.data = State{MiMoKeys: []MiMoKey{}, ExternalKeys: []ExternalKey{}, Channels: []UpstreamChannel{}, Voices: []Voice{}}
+		s.data = State{MiMoKeys: []MiMoKey{}, ExternalKeys: []ExternalKey{}, Voices: []Voice{}}
 		return s.saveLocked()
 	}
 	if err != nil {
 		return err
 	}
 	if len(b) == 0 {
-		s.data = State{MiMoKeys: []MiMoKey{}, ExternalKeys: []ExternalKey{}, Channels: []UpstreamChannel{}, Voices: []Voice{}}
+		s.data = State{MiMoKeys: []MiMoKey{}, ExternalKeys: []ExternalKey{}, Voices: []Voice{}}
 		return nil
 	}
 	if err := json.Unmarshal(b, &s.data); err != nil {
@@ -130,14 +119,6 @@ func (s *Store) load() error {
 	}
 	if s.data.ExternalKeys == nil {
 		s.data.ExternalKeys = []ExternalKey{}
-	}
-	if s.data.Channels == nil {
-		s.data.Channels = []UpstreamChannel{}
-	}
-	for i := range s.data.Channels {
-		if s.data.Channels[i].ModelAliases == nil {
-			s.data.Channels[i].ModelAliases = map[string]string{}
-		}
 	}
 	return nil
 }
@@ -189,7 +170,6 @@ func (s *Store) Status() map[string]any {
 		"mimoUsableCount":  usable,
 		"externalKeyCount": len(s.data.ExternalKeys),
 		"voiceCount":       len(s.data.Voices),
-		"channelCount":     len(s.data.Channels),
 		"stats":            s.data.Stats,
 	}
 }
@@ -422,129 +402,6 @@ func (s *Store) MarkVoiceKeyUsed(voiceID, keyID string) {
 			return
 		}
 	}
-}
-
-// ====================== 上游渠道管理 ======================
-
-func (s *Store) ListChannels() []map[string]any {
-	s.mu.RLock()
-	defer s.mu.RUnlock()
-	out := make([]map[string]any, 0, len(s.data.Channels))
-	for _, ch := range s.data.Channels {
-		out = append(out, map[string]any{
-			"id": ch.ID, "label": ch.Label, "baseUrl": ch.BaseURL,
-			"masked": maskSecret(ch.APIKey), "weight": weightOrOne(ch.Weight),
-			"enabled": ch.Enabled, "models": ch.Models, "modelAliases": ch.ModelAliases, "createdAt": ch.CreatedAt,
-		})
-	}
-	return out
-}
-
-func (s *Store) EnabledChannels() []UpstreamChannel {
-	s.mu.RLock()
-	defer s.mu.RUnlock()
-	out := make([]UpstreamChannel, 0, len(s.data.Channels))
-	for _, ch := range s.data.Channels {
-		if ch.Enabled && strings.TrimSpace(ch.BaseURL) != "" {
-			ch.Weight = weightOrOne(ch.Weight)
-			out = append(out, ch)
-		}
-	}
-	return out
-}
-
-func (s *Store) AddChannel(label, baseURL, apiKey string, weight int, models []string, modelAliases map[string]string) (UpstreamChannel, error) {
-	baseURL = strings.TrimRight(strings.TrimSpace(baseURL), "/")
-	if baseURL == "" {
-		return UpstreamChannel{}, errors.New("base_url required")
-	}
-	if len(models) == 0 {
-		models = []string{"mimo-v2.5-tts", "mimo-v2.5-tts-voicedesign"}
-	}
-	s.mu.Lock()
-	defer s.mu.Unlock()
-	ch := UpstreamChannel{ID: id("up"), Label: fallback(label, "上游渠道"), BaseURL: baseURL, APIKey: strings.TrimSpace(apiKey), Weight: weightOrOne(weight), Enabled: true, Models: models, ModelAliases: cleanModelAliases(modelAliases), CreatedAt: time.Now()}
-	s.data.Channels = append(s.data.Channels, ch)
-	return ch, s.saveLocked()
-}
-
-func (s *Store) DeleteChannel(id string) error {
-	s.mu.Lock()
-	defer s.mu.Unlock()
-	chs := s.data.Channels[:0]
-	found := false
-	for _, ch := range s.data.Channels {
-		if ch.ID == id {
-			found = true
-			continue
-		}
-		chs = append(chs, ch)
-	}
-	if !found {
-		return errors.New("channel not found")
-	}
-	s.data.Channels = chs
-	return s.saveLocked()
-}
-
-func (s *Store) GetChannelConfig(id string) (UpstreamChannel, error) {
-	s.mu.RLock()
-	defer s.mu.RUnlock()
-	for _, ch := range s.data.Channels {
-		if ch.ID == id {
-			return ch, nil
-		}
-	}
-	return UpstreamChannel{}, errors.New("channel not found")
-}
-
-func (s *Store) GetChannelSecret(id string) (string, error) {
-	s.mu.RLock()
-	defer s.mu.RUnlock()
-	for _, ch := range s.data.Channels {
-		if ch.ID == id {
-			return ch.APIKey, nil
-		}
-	}
-	return "", errors.New("channel not found")
-}
-
-func (s *Store) UpdateChannel(id string, weight *int, enabled *bool, label *string, baseURL *string, apiKey *string, models []string, modelAliases map[string]string) error {
-	s.mu.Lock()
-	defer s.mu.Unlock()
-	for i := range s.data.Channels {
-		if s.data.Channels[i].ID == id {
-			if weight != nil {
-				s.data.Channels[i].Weight = weightOrOne(*weight)
-			}
-			if enabled != nil {
-				s.data.Channels[i].Enabled = *enabled
-			}
-			if label != nil && strings.TrimSpace(*label) != "" {
-				s.data.Channels[i].Label = strings.TrimSpace(*label)
-			}
-			if baseURL != nil {
-				newURL := strings.TrimRight(strings.TrimSpace(*baseURL), "/")
-				if newURL != "" {
-					s.data.Channels[i].BaseURL = newURL
-				}
-			}
-			if apiKey != nil {
-				// Non-empty replacement; empty string means "keep existing"
-				if strings.TrimSpace(*apiKey) != "" {
-					s.data.Channels[i].APIKey = strings.TrimSpace(*apiKey)
-				}
-			}
-			if models != nil {
-				s.data.Channels[i].Models = models
-			}
-			if modelAliases != nil {
-				s.data.Channels[i].ModelAliases = cleanModelAliases(modelAliases)
-			}
-			return s.saveLocked()
-		}
-	}
-	return errors.New("channel not found")
 }
 
 // ====================== 外部 Key ======================

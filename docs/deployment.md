@@ -28,12 +28,12 @@ The default compose file stores runtime data under:
 ./data
 ```
 
-This directory contains API keys, upstream channels, runtime settings, and call logs. Do not commit it.
+This directory contains API keys, runtime settings, and call logs. Do not commit it.
 
 ## Production Checklist
 
 1. Change the default admin token in **System Settings**.
-2. Configure MiMo API Keys or upstream channels.
+2. Configure MiMo API Keys.
 3. Create External API Keys if external callers should authenticate.
 4. Set `REQUIRE_EXTERNAL_KEY=true` if unauthenticated TTS calls should be rejected.
 5. Place the service behind HTTPS if exposed publicly.

@@ -1,7 +1,7 @@
 import React, { useEffect, useMemo, useState } from 'react'
 import { createRoot } from 'react-dom/client'
 import {
-  Activity, Globe, KeyRound, LogOut, Mic, Menu, Waves,
+  Activity, Github, KeyRound, LogOut, Mic, Menu, Waves,
   ShieldCheck, Settings, Volume2, X
 } from 'lucide-react'
 import { api } from './lib/api.js'
@@ -15,7 +15,6 @@ const NAV_ITEMS = [
   { id: 'tts',      label: '语音合成',  icon: Volume2,    section: '核心功能' },
   { id: 'voices',   label: '音色管理',  icon: Mic,        section: '核心功能' },
   { id: 'mimo',     label: 'MiMo Keys', icon: KeyRound,   section: '管理' },
-  { id: 'channels', label: '上游渠道',  icon: Globe,      section: '管理' },
   { id: 'ext',      label: 'API Keys',  icon: KeyRound,   section: '管理' },
   { id: 'calllogs', label: '调用记录',  icon: Activity,   section: '监控' },
   { id: 'status',   label: '系统状态',  icon: ShieldCheck, section: '监控' },
@@ -26,7 +25,6 @@ const PAGE_TITLES = {
   tts:      '语音合成',
   voices:   '音色管理',
   mimo:     'MiMo API Keys',
-  channels: '上游渠道',
   ext:      '外部 API Keys',
   calllogs: '调用记录',
   status:   '系统状态',
@@ -211,6 +209,9 @@ function App() {
             <span className="topbar-title">{PAGE_TITLES[page] || 'MimoTTS'}</span>
           </div>
           <div className="topbar-right">
+            <a className="github-link" href="https://github.com/xbcvv/mimotts" target="_blank" rel="noreferrer">
+              <Github size={15} /> GitHub
+            </a>
             <div className="topbar-status">
               <span className={`status-dot ${healthOk === false ? 'offline' : ''}`} />
               {healthOk === false ? '服务异常' : '服务正常'}

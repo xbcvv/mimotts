@@ -26,7 +26,6 @@ type TTSRequest struct {
 	Voice         string `json:"voice"`
 	Context       string `json:"context"`
 	VoiceDataURL  string `json:"voiceDataUrl"`
-	UpstreamModel string `json:"-"`
 }
 
 type mimoResponse struct {
@@ -45,26 +44,23 @@ type selectedKey struct {
 	Label   string
 	BaseURL string
 	Secret  string
-	Aliases map[string]string
 }
 
 func synthesizeWithPool(st *store.Store, req TTSRequest) ([]byte, selectedKey, TTSRequest, store.Voice, error) {
 	keys := st.EnabledMiMoKeys()
-	channels := st.EnabledChannels()
-	if len(keys) == 0 && len(channels) == 0 {
-		return nil, selectedKey{}, req, store.Voice{}, errors.New("MiMo API Key 或上游渠道未配置/全部禁用")
+	if len(keys) == 0 {
+		return nil, selectedKey{}, req, store.Voice{}, errors.New("MiMo API Key 未配置/全部禁用")
 	}
 	voice, err := resolveProjectVoice(st, &req)
 	if err != nil {
 		return nil, selectedKey{}, req, voice, err
 	}
-	ordered := orderUpstreams(keys, channels, voice)
+	ordered := orderUpstreams(keys, voice)
 	var lastErr error
 	for _, key := range ordered {
 		chosen := key
-		callReq := applyModelAlias(req, chosen.Aliases)
 		settings := st.GetSettings()
-		audio, err := callMiMo(chosen.BaseURL, chosen.Secret, callReq, settings.ProxyURL)
+		audio, err := callMiMo(chosen.BaseURL, chosen.Secret, req, settings.ProxyURL)
 		if err == nil {
 			if voice.ID != "" {
 				st.MarkVoiceKeyUsed(voice.ID, chosen.ID)
@@ -117,8 +113,8 @@ func resolveProjectVoice(st *store.Store, req *TTSRequest) (store.Voice, error) 
 	return v, nil
 }
 
-func orderUpstreams(keys []store.MiMoKey, channels []store.UpstreamChannel, voice store.Voice) []selectedKey {
-	expanded := make([]selectedKey, 0, len(keys)+len(channels))
+func orderUpstreams(keys []store.MiMoKey, voice store.Voice) []selectedKey {
+	expanded := make([]selectedKey, 0, len(keys))
 	for _, key := range keys {
 		weight := key.Weight
 		if weight <= 0 {
@@ -128,82 +124,45 @@ func orderUpstreams(keys []store.MiMoKey, channels []store.UpstreamChannel, voic
 			expanded = append(expanded, selectedKey{ID: key.ID, Label: key.Label, BaseURL: "https://api.xiaomimimo.com/v1", Secret: key.Key})
 		}
 	}
-	for _, ch := range channels {
-		if !channelSupports(ch, voice) {
-			continue
-		}
-		weight := ch.Weight
-		if weight <= 0 {
-			weight = 1
-		}
-		for i := 0; i < weight; i++ {
-			expanded = append(expanded, selectedKey{ID: ch.ID, Label: ch.Label, BaseURL: ch.BaseURL, Secret: ch.APIKey, Aliases: ch.ModelAliases})
-		}
-	}
 	if len(expanded) == 0 {
 		return []selectedKey{}
 	}
-	// Voice clone requires the official MiMo API because OpenAI-compatible
-	// upstream channels may drop MiMo's top-level audio.voice field.
-	if voice.Kind == "clone" {
-		keyFirst := make([]selectedKey, 0, len(expanded))
-		channelLast := make([]selectedKey, 0, len(expanded))
+	// Filter by availableKeys if voice has them, then round-robin.
+	var filtered []selectedKey
+	if voice.ID != "" && len(voice.AvailableKeys) > 0 {
 		for _, k := range expanded {
-			if strings.HasPrefix(k.ID, "up_") {
-				channelLast = append(channelLast, k)
-			} else {
-				keyFirst = append(keyFirst, k)
+			if contains(voice.AvailableKeys, k.ID) {
+				filtered = append(filtered, k)
 			}
 		}
-		expanded = append(keyFirst, channelLast...)
+		if len(filtered) == 0 {
+			filtered = expanded
+		}
+	} else {
+		filtered = expanded
+	}
+	return makeRoundRobinList(filtered)
+}
+
+func makeRoundRobinList(expanded []selectedKey) []selectedKey {
+	if len(expanded) <= 1 {
+		return expanded
 	}
 	start := int(atomic.AddUint64(&rrCounter, 1) % uint64(len(expanded)))
 	seen := map[string]bool{}
-	primary := make([]selectedKey, 0, len(expanded))
-	fallback := make([]selectedKey, 0, len(expanded))
+	out := make([]selectedKey, 0, len(expanded))
 	for i := 0; i < len(expanded); i++ {
-		key := expanded[(start+i)%len(expanded)]
-		if seen[key.ID] {
+		k := expanded[(start+i)%len(expanded)]
+		if seen[k.ID] {
 			continue
 		}
-		seen[key.ID] = true
-		if voice.ID == "" || len(voice.AvailableKeys) == 0 || contains(voice.AvailableKeys, key.ID) {
-			primary = append(primary, key)
-		} else {
-			fallback = append(fallback, key)
-		}
+		seen[k.ID] = true
+		out = append(out, k)
 	}
-	return append(primary, fallback...)
+	return out
 }
 
-func channelSupports(ch store.UpstreamChannel, voice store.Voice) bool {
-	if len(ch.Models) == 0 {
-		return true
-	}
-	model := "mimo-v2.5-tts"
-	switch voice.Kind {
-	case "design":
-		model = "mimo-v2.5-tts-voicedesign"
-	case "clone":
-		model = "mimo-v2.5-tts-voiceclone"
-	}
-	for _, m := range ch.Models {
-		if m == model || m == "*" {
-			return true
-		}
-	}
-	return false
-}
 
-func applyModelAlias(req TTSRequest, aliases map[string]string) TTSRequest {
-	if aliases == nil {
-		return req
-	}
-	if mapped := strings.TrimSpace(aliases[req.Model]); mapped != "" {
-		req.UpstreamModel = mapped
-	}
-	return req
-}
 
 func containerReachableBaseURL(baseURL string) string {
 	baseURL = strings.TrimRight(strings.TrimSpace(baseURL), "/")
@@ -247,11 +206,7 @@ func callMiMo(baseURL, apiKey string, req TTSRequest, proxyURL string) ([]byte, 
 	default:
 		return nil, errors.New("不支持的模型")
 	}
-	payloadModel := req.Model
-	if strings.TrimSpace(req.UpstreamModel) != "" {
-		payloadModel = strings.TrimSpace(req.UpstreamModel)
-	}
-	payload := map[string]any{"model": payloadModel, "messages": messages, "audio": audio}
+	payload := map[string]any{"model": req.Model, "messages": messages, "audio": audio}
 	body, _ := json.Marshal(payload)
 	httpReq, err := http.NewRequest(http.MethodPost, strings.TrimRight(baseURL, "/")+"/chat/completions", bytes.NewReader(body))
 	if err != nil {

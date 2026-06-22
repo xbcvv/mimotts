@@ -267,3 +267,5 @@ textarea { min-height: 90px; resize: vertical; line-height: 1.5; }
 .model-check.disabled { opacity: .58; cursor: not-allowed; background: #f8fafc; border-style: dashed; }
 .model-check.disabled span { color: var(--fg-light); }
 .model-check.disabled input { cursor: not-allowed; }
+.github-link { display: inline-flex; align-items: center; gap: 6px; padding: 7px 11px; border: 1px solid var(--card-border); border-radius: 999px; color: var(--fg-muted); text-decoration: none; background: #fff; font-size: .82rem; font-weight: 650; }
+.github-link:hover { color: var(--primary); border-color: rgba(249, 115, 22, .35); background: var(--primary-soft); }

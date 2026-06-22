@@ -18,7 +18,7 @@
 The admin dashboard includes **System Settings**:
 
 - Change Admin Token without editing `.env`
-- Configure outbound proxy for upstream `/models` and TTS calls
+- Configure outbound proxy for TTS calls
 
 Supported proxy URL examples:
 

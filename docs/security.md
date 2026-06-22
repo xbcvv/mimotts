@@ -24,7 +24,7 @@ If exposing MiMoTTS to the Internet:
 2. Change Admin Token.
 3. Enable `REQUIRE_EXTERNAL_KEY=true` for external TTS calls.
 4. Restrict access with a reverse proxy or firewall when possible.
-5. Regularly rotate upstream and external keys.
+5. Regularly rotate MiMo and external keys.
 
 ## Git Hygiene
 

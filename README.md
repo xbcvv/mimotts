@@ -1,6 +1,6 @@
 # MiMoTTS
 
-MiMoTTS 是一个轻量级 MiMo TTS 网关，提供 React 管理后台、MiMo Key 池、上游渠道路由、模型映射、调用日志，以及兼容 OpenAI `/v1/audio/speech` 的语音合成接口。
+MiMoTTS 是一个轻量级 MiMo TTS 网关，提供 React 管理后台、MiMo Key 池、调用日志，以及兼容 OpenAI `/v1/audio/speech` 的语音合成接口。
 
 > 默认后台 Token 是 `mimotts`，仅用于首次启动。生产环境请登录后立即在「系统设置」中修改。
 
@@ -10,26 +10,21 @@ MiMoTTS 是一个轻量级 MiMo TTS 网关，提供 React 管理后台、MiMo Ke
 - Docker 一键部署
 - 管理后台支持：
   - MiMo API Key 池管理
-  - 上游渠道管理
   - External API Key 管理
   - 预置音色 / 音色设计 / 音色克隆
   - 调用日志与统计
   - 系统设置
 - 兼容 OpenAI 的语音接口：`POST /v1/audio/speech`
 - 原生语音接口：`POST /api/tts`
-- 支持上游模型映射：可将本地标准模型映射到上游实际模型 ID
 - 支持运行时修改 Admin Token
 - 支持配置出站代理
 - 敏感字段默认脱敏，完整密钥需要显式显示
 
 ## 音色克隆说明
 
-音色克隆需要官方 MiMo API Key，不支持上游渠道。原因：MiMo API 通过顶层 `audio.voice` 字段传递克隆样本，而 OpenAI 兼容的上游渠道会丢弃该字段。
+音色克隆需要官方 MiMo API Key。原因：MiMo API 通过顶层 `audio.voice` 字段传递克隆样本。
 
-如果你需要使用音色克隆，请：
-1. 在「MiMo Keys」页面添加官方 MiMo API Key
-2. 确保该 Key 已启用
-3. 上游渠道可以继续用于预置音色和音色设计
+如果你需要使用音色克隆，请在「MiMo Keys」页面添加官方 MiMo API Key 并确保已启用。
 
 ## 快速开始
 
@@ -94,7 +89,6 @@ mimotts/
 - 语音合成
 - 音色管理
 - MiMo Keys
-- 上游渠道
 - API Keys
 - 调用记录
 - 系统状态
@@ -120,30 +114,6 @@ socks5://host.docker.internal:7890
 ```
 
 如果代理运行在宿主机，Docker 容器内建议使用 `host.docker.internal`，不要使用容器内的 `127.0.0.1`。
-
-## 上游渠道与模型映射
-
-MiMoTTS 内部使用本地标准模型：
-
-| 本地标准模型 | 说明 |
-| --- | --- |
-| `mimo-v2.5-tts` | 预置音色 TTS |
-| `mimo-v2.5-tts-voicedesign` | 音色设计 |
-| `mimo-v2.5-tts-voiceclone` | 音色克隆 |
-
-如果你的上游服务暴露的是其它模型 ID，可以在「上游渠道」中点击「读取上游模型」，然后建立映射关系。
-
-> 注意：上游渠道不支持音色克隆（`mimo-v2.5-tts-voiceclone`），需要配置官方 MiMo API Key 才能使用克隆音色。
-
-示例：
-
-```text
-MiMo TTS（预置音色） -> provider-tts-v1
-MiMo TTS（音色设计） -> provider-voice-design
-MiMo TTS（音色克隆） -> provider-voice-clone
-```
-
-这样外部调用仍然可以使用 MiMoTTS 的标准模型，实际请求会自动转发到上游对应模型。
 
 ## API 使用
 
@@ -257,7 +227,7 @@ bash verify.sh
 2. 不要提交 `.env`、`data/`、调用日志或真实密钥。
 3. 如果暴露到公网，建议放到 HTTPS 反向代理后面。
 4. 如果提供给外部系统调用，建议开启 `REQUIRE_EXTERNAL_KEY=true`。
-5. 定期轮换 MiMo Key、上游渠道 Key 和 External API Key。
+5. 定期轮换 MiMo Key 和 External API Key。
 
 ## 详细文档
 
@@ -265,7 +235,6 @@ bash verify.sh
 - [配置说明](docs/configuration.md)
 - [API 文档](docs/api.md)
 - [后台使用指南](docs/admin-guide.md)
-- [上游模型映射](docs/upstream-model-mapping.md)
 - [安全说明](docs/security.md)
 
 ## License
