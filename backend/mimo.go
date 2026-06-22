@@ -143,6 +143,20 @@ func orderUpstreams(keys []store.MiMoKey, channels []store.UpstreamChannel, voic
 	if len(expanded) == 0 {
 		return []selectedKey{}
 	}
+	// Voice clone requires the official MiMo API because OpenAI-compatible
+	// upstream channels may drop MiMo's top-level audio.voice field.
+	if voice.Kind == "clone" {
+		keyFirst := make([]selectedKey, 0, len(expanded))
+		channelLast := make([]selectedKey, 0, len(expanded))
+		for _, k := range expanded {
+			if strings.HasPrefix(k.ID, "up_") {
+				channelLast = append(channelLast, k)
+			} else {
+				keyFirst = append(keyFirst, k)
+			}
+		}
+		expanded = append(keyFirst, channelLast...)
+	}
 	start := int(atomic.AddUint64(&rrCounter, 1) % uint64(len(expanded)))
 	seen := map[string]bool{}
 	primary := make([]selectedKey, 0, len(expanded))
@@ -209,11 +223,11 @@ func callMiMo(baseURL, apiKey string, req TTSRequest, proxyURL string) ([]byte, 
 	if req.Model == "" {
 		req.Model = "mimo-v2.5-tts"
 	}
-	messages := []map[string]string{}
+	messages := []map[string]any{}
 	if strings.TrimSpace(req.Context) != "" {
-		messages = append(messages, map[string]string{"role": "user", "content": req.Context})
+		messages = append(messages, map[string]any{"role": "user", "content": req.Context})
 	}
-	messages = append(messages, map[string]string{"role": "assistant", "content": req.Text})
+	messages = append(messages, map[string]any{"role": "assistant", "content": req.Text})
 	audio := map[string]string{"format": "wav"}
 	switch req.Model {
 	case "mimo-v2.5-tts":

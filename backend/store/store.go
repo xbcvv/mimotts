@@ -459,7 +459,7 @@ func (s *Store) AddChannel(label, baseURL, apiKey string, weight int, models []s
 		return UpstreamChannel{}, errors.New("base_url required")
 	}
 	if len(models) == 0 {
-		models = []string{"mimo-v2.5-tts", "mimo-v2.5-tts-voiceclone", "mimo-v2.5-tts-voicedesign"}
+		models = []string{"mimo-v2.5-tts", "mimo-v2.5-tts-voicedesign"}
 	}
 	s.mu.Lock()
 	defer s.mu.Unlock()
