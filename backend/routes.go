@@ -236,12 +236,12 @@ func (s *Server) listModels(w http.ResponseWriter, r *http.Request) {
 	writeJSON(w, standardModels())
 }
 
-func standardModels() []map[string]string {
-	return []map[string]string{
-		{"id": "mimo-v2.5-tts", "name": "MiMo TTS（预置音色）"},
-		{"id": "mimo-v2.5-tts-voiceclone", "name": "MiMo TTS（音色克隆）"},
-		{"id": "mimo-v2.5-tts-voicedesign", "name": "MiMo TTS（音色设计）"},
-		{"id": "*", "name": "*（全部模型）"},
+func standardModels() []map[string]any {
+	return []map[string]any{
+		{"id": "mimo-v2.5-tts", "name": "MiMo TTS（预置音色）", "channelSupported": true},
+		{"id": "mimo-v2.5-tts-voiceclone", "name": "MiMo TTS（音色克隆）", "channelSupported": false, "channelNote": "不可用于上游渠道，请使用官方 MiMo API Key"},
+		{"id": "mimo-v2.5-tts-voicedesign", "name": "MiMo TTS（音色设计）", "channelSupported": true},
+		{"id": "*", "name": "*（全部模型）", "channelSupported": true},
 	}
 }
 
