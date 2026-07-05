@@ -18,6 +18,7 @@ type MiMoKey struct {
 	ID        string    `json:"id"`
 	Label     string    `json:"label"`
 	Key       string    `json:"key"`
+	BaseURL   string    `json:"baseUrl,omitempty"`
 	Weight    int       `json:"weight"`
 	Enabled   bool      `json:"enabled"`
 	CreatedAt time.Time `json:"createdAt"`
@@ -176,6 +177,16 @@ func (s *Store) Status() map[string]any {
 
 // EnabledMiMoKeys 返回按 (weight desc, createdAt asc) 排序后的可用 key。
 // 同一调用链内，调用方使用 stable 顺序 + 起点轮询，天然带负载均衡。
+const defaultMiMoBaseURL = "https://api.xiaomimimo.com/v1"
+
+func NormalizeMiMoBaseURL(raw string) string {
+	raw = strings.TrimSpace(raw)
+	if raw == "" {
+		return defaultMiMoBaseURL
+	}
+	return strings.TrimRight(raw, "/")
+}
+
 func (s *Store) EnabledMiMoKeys() []MiMoKey {
 	s.mu.RLock()
 	defer s.mu.RUnlock()
@@ -202,6 +213,7 @@ func (s *Store) ListMiMoKeys() []map[string]any {
 		out = append(out, map[string]any{
 			"id":        key.ID,
 			"label":     key.Label,
+			"baseUrl":   NormalizeMiMoBaseURL(key.BaseURL),
 			"masked":    maskSecret(key.Key),
 			"weight":    weightOrOne(key.Weight),
 			"enabled":   key.Enabled,
@@ -211,7 +223,7 @@ func (s *Store) ListMiMoKeys() []map[string]any {
 	return out
 }
 
-func (s *Store) AddMiMoKey(label, secret string, weight int) (MiMoKey, error) {
+func (s *Store) AddMiMoKey(label, secret, baseURL string, weight int) (MiMoKey, error) {
 	secret = strings.TrimSpace(secret)
 	if secret == "" {
 		return MiMoKey{}, errors.New("key required")
@@ -222,6 +234,7 @@ func (s *Store) AddMiMoKey(label, secret string, weight int) (MiMoKey, error) {
 		ID:        id("mk"),
 		Label:     fallback(label, "MiMo Key"),
 		Key:       secret,
+		BaseURL:   strings.TrimSpace(baseURL),
 		Weight:    weightOrOne(weight),
 		Enabled:   true,
 		CreatedAt: time.Now(),
@@ -260,7 +273,7 @@ func (s *Store) GetMiMoKeySecret(id string) (string, error) {
 	return "", errors.New("key not found")
 }
 
-func (s *Store) UpdateMiMoKey(id string, weight *int, enabled *bool, label *string, secret *string) error {
+func (s *Store) UpdateMiMoKey(id string, weight *int, enabled *bool, label *string, secret *string, baseURL *string) error {
 	s.mu.Lock()
 	defer s.mu.Unlock()
 	for i := range s.data.MiMoKeys {
@@ -274,6 +287,9 @@ func (s *Store) UpdateMiMoKey(id string, weight *int, enabled *bool, label *stri
 					return errors.New("key required")
 				}
 				s.data.MiMoKeys[i].Key = next
+			}
+			if baseURL != nil {
+				s.data.MiMoKeys[i].BaseURL = strings.TrimSpace(*baseURL)
 			}
 			if weight != nil {
 				s.data.MiMoKeys[i].Weight = weightOrOne(*weight)

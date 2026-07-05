@@ -159,10 +159,11 @@ func (s *Server) listExternalKeys(w http.ResponseWriter, r *http.Request) {
 func (s *Server) addMiMoKey(w http.ResponseWriter, r *http.Request) {
 	var body struct {
 		Label, Key string
+		BaseURL    string `json:"baseUrl"`
 		Weight     int
 	}
 	if decode(w, r, &body) {
-		key, err := s.store.AddMiMoKey(body.Label, body.Key, body.Weight)
+		key, err := s.store.AddMiMoKey(body.Label, body.Key, body.BaseURL, body.Weight)
 		if err != nil {
 			writeErr(w, 400, err.Error())
 			return
@@ -206,11 +207,12 @@ func (s *Server) updateMiMoKey(w http.ResponseWriter, r *http.Request) {
 	var body struct {
 		Label   *string `json:"label"`
 		Key     *string `json:"key"`
+		BaseURL *string `json:"baseUrl"`
 		Weight  *int    `json:"weight"`
 		Enabled *bool   `json:"enabled"`
 	}
 	if decode(w, r, &body) {
-		if err := s.store.UpdateMiMoKey(id, body.Weight, body.Enabled, body.Label, body.Key); err != nil {
+		if err := s.store.UpdateMiMoKey(id, body.Weight, body.Enabled, body.Label, body.Key, body.BaseURL); err != nil {
 			writeErr(w, 404, err.Error())
 			return
 		}

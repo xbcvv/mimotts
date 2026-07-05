@@ -121,7 +121,7 @@ func orderUpstreams(keys []store.MiMoKey, voice store.Voice) []selectedKey {
 			weight = 1
 		}
 		for i := 0; i < weight; i++ {
-			expanded = append(expanded, selectedKey{ID: key.ID, Label: key.Label, BaseURL: "https://api.xiaomimimo.com/v1", Secret: key.Key})
+			expanded = append(expanded, selectedKey{ID: key.ID, Label: key.Label, BaseURL: store.NormalizeMiMoBaseURL(key.BaseURL), Secret: key.Key})
 		}
 	}
 	if len(expanded) == 0 {
