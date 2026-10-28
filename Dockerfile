@@ -15,7 +15,8 @@ RUN CGO_ENABLED=0 GOOS=linux go build -ldflags='-s -w' -o /out/mimotts .
 
 FROM alpine:3.22
 WORKDIR /app
-RUN addgroup -S app && adduser -S app -G app && mkdir -p /app/data
+RUN apk add --no-cache ffmpeg && \
+    addgroup -S app && adduser -S app -G app && mkdir -p /app/data
 COPY --from=backend /out/mimotts /app/mimotts
 COPY --from=backend /src/backend/static /app/static
 RUN chown -R app:app /app

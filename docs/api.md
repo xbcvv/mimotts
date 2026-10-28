@@ -49,11 +49,16 @@ Content-Type: application/json
   "model": "mimo-v2.5-tts",
   "input": "你好，我是 MiMoTTS。",
   "voice": "白桦",
-  "response_format": "wav"
+  "response_format": "wav",
+  "speed": 1.0
 }
 ```
 
-Returns `audio/wav`.
+Supported `response_format`: `wav` (default), `mp3`, `opus`, `aac`, `flac`, `pcm`.
+
+Supported `speed`: `0.25` ~ `4.0`. Out-of-range returns `400`.
+
+Errors use OpenAI nested structure: `{"error": {"message": "..."}}`.
 
 ## Public Voices
 

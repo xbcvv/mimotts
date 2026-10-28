@@ -2,7 +2,11 @@ export async function api(path, options = {}) {
   const res = await fetch(path, options)
   if (!res.ok) {
     let msg = '请求失败'
-    try { msg = (await res.json()).error || msg } catch {}
+    try {
+      const body = await res.json()
+      // Support both flat ({error:"..."}) and OpenAI-style nested ({error:{message:"..."}}).
+      msg = (typeof body?.error === 'string' ? body.error : body?.error?.message) || msg
+    } catch {}
     throw new Error(msg)
   }
   return res

@@ -21,11 +21,12 @@ var presetVoices = store.PresetVoices
 var rrCounter uint64
 
 type TTSRequest struct {
-	Text          string `json:"text"`
-	Model         string `json:"model"`
-	Voice         string `json:"voice"`
-	Context       string `json:"context"`
-	VoiceDataURL  string `json:"voiceDataUrl"`
+	Text          string  `json:"text"`
+	Model         string  `json:"model"`
+	Voice         string  `json:"voice"`
+	Context       string  `json:"context"`
+	VoiceDataURL  string  `json:"voiceDataUrl"`
+	Speed         float64 `json:"speed"`
 }
 
 type mimoResponse struct {
@@ -187,7 +188,10 @@ func callMiMo(baseURL, apiKey string, req TTSRequest, proxyURL string) ([]byte, 
 		messages = append(messages, map[string]any{"role": "user", "content": req.Context})
 	}
 	messages = append(messages, map[string]any{"role": "assistant", "content": req.Text})
-	audio := map[string]string{"format": "wav"}
+	audio := map[string]any{"format": "wav"}
+	if req.Speed > 0 {
+		audio["speed"] = req.Speed
+	}
 	switch req.Model {
 	case "mimo-v2.5-tts":
 		if _, ok := presetVoices[req.Voice]; !ok {

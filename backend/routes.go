@@ -401,18 +401,19 @@ func (s *Server) openAISpeech(w http.ResponseWriter, r *http.Request) {
 			CallerKeyID: callerKeyID,
 			Error:       "外部调用 key 无效或缺失",
 		})
-		writeErr(w, http.StatusUnauthorized, "外部调用 key 无效或缺失")
+		writeSpeechErr(w, http.StatusUnauthorized, "外部调用 key 无效或缺失")
 		return
 	}
 
 	var body struct {
-		Model          string `json:"model"`
-		Input          string `json:"input"`
-		Voice          string `json:"voice"`
-		ResponseFormat string `json:"response_format"`
-		Instructions   string `json:"instructions"`
+		Model          string  `json:"model"`
+		Input          string  `json:"input"`
+		Voice          string  `json:"voice"`
+		ResponseFormat string  `json:"response_format"`
+		Speed          float64 `json:"speed"`
+		Instructions   string  `json:"instructions"`
 	}
-	if !decode(w, r, &body) {
+	if !decodeSpeech(w, r, &body) {
 		return
 	}
 	req := TTSRequest{
@@ -420,6 +421,16 @@ func (s *Server) openAISpeech(w http.ResponseWriter, r *http.Request) {
 		Model:   body.Model,
 		Voice:   body.Voice,
 		Context: body.Instructions,
+		Speed:   body.Speed,
+	}
+	// OpenAI-standard validation: reject unsupported response_format and out-of-range speed.
+	if body.ResponseFormat != "" && !isValidResponseFormat(body.ResponseFormat) {
+		writeSpeechErr(w, http.StatusBadRequest, fmt.Sprintf("Invalid response_format: %s", body.ResponseFormat))
+		return
+	}
+	if body.Speed != 0 && (body.Speed < 0.25 || body.Speed > 4.0) {
+		writeSpeechErr(w, http.StatusBadRequest, "speed must be between 0.25 and 4.0")
+		return
 	}
 	if req.Model == "" {
 		req.Model = "mimo-v2.5-tts"
@@ -446,7 +457,7 @@ func (s *Server) openAISpeech(w http.ResponseWriter, r *http.Request) {
 			Success:     false, HTTPStatus: httpStatus, DurationMs: durationMs,
 			InputChars: inputChars, Error: errMsg,
 		})
-		writeErr(w, http.StatusBadRequest, err.Error())
+		writeSpeechErr(w, http.StatusBadRequest, err.Error())
 		return
 	}
 
@@ -462,10 +473,13 @@ func (s *Server) openAISpeech(w http.ResponseWriter, r *http.Request) {
 		AudioBytes: len(audio), InputChars: inputChars,
 	})
 
-	w.Header().Set("Content-Type", "audio/wav")
-	w.Header().Set("Content-Disposition", "inline; filename=mimotts.wav")
+	// OpenAI-compatible output: honor response_format and speed via ffmpeg.
+	contentType, fileName := resolveAudioContentType(body.ResponseFormat)
+	out := convertAudio(audio, body.ResponseFormat, body.Speed)
+	w.Header().Set("Content-Type", contentType)
+	w.Header().Set("Content-Disposition", fmt.Sprintf("inline; filename=%s", fileName))
 	w.Header().Set("X-MiMo-Key-ID", key.ID)
-	_, _ = w.Write(audio)
+	_, _ = w.Write(out)
 }
 
 func resolvedVoiceDisplay(req TTSRequest, voice store.Voice, requestedVoice string) (string, string, string) {
@@ -642,4 +656,34 @@ func writeErr(w http.ResponseWriter, code int, msg string) {
 	w.Header().Set("Content-Type", "application/json; charset=utf-8")
 	w.WriteHeader(code)
 	_ = json.NewEncoder(w).Encode(map[string]string{"error": msg})
+}
+
+// writeSpeechErr writes an [OI]-standard nested error payload.
+// Used only by the [OI]-compatible /v1/audio/speech endpoint so that
+// non-standard endpoints keep their existing flat error format.
+func writeSpeechErr(w http.ResponseWriter, code int, msg string) {
+	w.Header().Set("Content-Type", "application/json; charset=utf-8")
+	w.WriteHeader(code)
+	_ = json.NewEncoder(w).Encode(map[string]any{"error": map[string]any{"message": msg}})
+}
+
+// decodeSpeech is decode() with [OI]-standard error responses.
+func decodeSpeech(w http.ResponseWriter, r *http.Request, v any) bool {
+	defer r.Body.Close()
+	const maxBody = 16 << 20
+	limited := io.LimitReader(r.Body, maxBody+1)
+	b, err := io.ReadAll(limited)
+	if err != nil {
+		writeSpeechErr(w, 400, "failed to read request body")
+		return false
+	}
+	if len(b) > maxBody {
+		writeSpeechErr(w, http.StatusRequestEntityTooLarge, "request body too large (max 16MB)")
+		return false
+	}
+	if err := json.Unmarshal(b, v); err != nil {
+		writeSpeechErr(w, 400, "invalid JSON body")
+		return false
+	}
+	return true
 }

@@ -150,11 +150,20 @@ Content-Type: application/json
   "model": "mimo-v2.5-tts",
   "input": "你好，我是 MiMoTTS。",
   "voice": "白桦",
-  "response_format": "wav"
+  "response_format": "wav",
+  "speed": 1.0
 }
 ```
 
-返回：`audio/wav`。
+支持的 `response_format`：`wav`（默认）、`mp3`、`opus`、`aac`、`flac`、`pcm`。
+
+支持的 `speed`：`0.25` ~ `4.0`，超出范围返回 400。
+
+错误响应采用 OpenAI 标准嵌套结构：
+
+```json
+{"error": {"message": "speed must be between 0.25 and 4.0"}}
+```
 
 ### 外部 API Key
 
